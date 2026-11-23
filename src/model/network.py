@@ -73,6 +73,40 @@ class QuoridorNet(nnx.Module):
         return logits, jnp.tanh(v[:, 0]), v[:, 1]
 
 
-def create_model(seed: int = 0, num_blocks: int = 8, channels: int = 96) -> QuoridorNet:
-    """Build a freshly initialised network."""
-    return QuoridorNet(rngs=nnx.Rngs(seed), num_blocks=num_blocks, channels=channels)
+class TinyQuoridorNet(nnx.Module):
+    """
+    Lightweight MLP trunk suitable for fast CPU inference and pure Python embedding.
+    Flattened canonical planes (9 * 9 * N_PLANES = 729) -> hidden layers -> policy, value, margin.
+    """
+
+    def __init__(self, *, rngs: nnx.Rngs, hidden_dim: int = 64, **kwargs):
+        in_dim = 9 * 9 * N_PLANES
+        self.fc1 = nnx.Linear(in_dim, hidden_dim, rngs=rngs)
+        self.fc2 = nnx.Linear(hidden_dim, hidden_dim, rngs=rngs)
+        self.policy_out = nnx.Linear(hidden_dim, ACTION_SIZE, rngs=rngs)
+        self.val_margin_out = nnx.Linear(hidden_dim, 2, rngs=rngs)
+
+    def __call__(self, x: jnp.ndarray):
+        """
+        x: (B, 9, 9, N_PLANES) canonical planes.
+        Returns (policy logits (B, 140), value (B,), margin (B,)).
+        """
+        b = x.shape[0]
+        h = x.reshape((b, -1))
+        h = nnx.relu(self.fc1(h))
+        h = nnx.relu(self.fc2(h))
+
+        logits = self.policy_out(h)
+        vm = self.val_margin_out(h)
+        return logits, jnp.tanh(vm[:, 0]), vm[:, 1]
+
+
+def create_model(
+    seed: int = 0, num_blocks: int = 8, channels: int = 96, arch: str = "resnet"
+) -> nnx.Module:
+    """Build a freshly initialised network (ResNet or TinyQuoridorNet)."""
+    rngs = nnx.Rngs(seed)
+    if arch == "tiny":
+        return TinyQuoridorNet(rngs=rngs, hidden_dim=channels)
+    return QuoridorNet(rngs=rngs, num_blocks=num_blocks, channels=channels)
+

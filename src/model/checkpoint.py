@@ -44,5 +44,9 @@ def load_checkpoint(path: str | Path, template):
 def load_model(path: str | Path) -> QuoridorNet:
     """Load a run's checkpoint; the architecture comes from <run>/config.json."""
     config = json.loads((Path(path).parent / "config.json").read_text())
-    template = create_model(num_blocks=config["blocks"], channels=config["channels"])
+    template = create_model(
+        num_blocks=config.get("blocks", 8),
+        channels=config.get("channels", 96),
+        arch=config.get("arch", "resnet"),
+    )
     return load_checkpoint(path, template)

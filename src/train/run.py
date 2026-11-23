@@ -33,12 +33,13 @@ from selfplay.replay_buffer import ReplayBuffer
 from train.tracking import MetricsLogger
 from train.trainer import make_optimizer, train
 
-MODEL_KEYS = ("blocks", "channels")  # fixed for a run; everything else may change
+MODEL_KEYS = ("arch", "blocks", "channels")  # fixed for a run; everything else may change
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Gumbel AlphaZero self-play training")
     p.add_argument("--name", default="main", help="run directory under runs/")
+    p.add_argument("--arch", default="resnet", choices=["resnet", "tiny"], help="network architecture")
     p.add_argument("--iterations", type=int, default=1000)
     p.add_argument("--lanes", type=int, default=1024, help="games played at once")
     p.add_argument("--steps", type=int, default=256, help="moves per lane per iter")
@@ -68,10 +69,11 @@ def main() -> None:
     if config_file.exists():  # resuming: the architecture must match the weights
         saved = json.loads(config_file.read_text())
         for k in MODEL_KEYS:
-            setattr(args, k, saved[k])
+            if k in saved:
+                setattr(args, k, saved[k])
     config_file.write_text(json.dumps(vars(args), indent=2))
 
-    model = create_model(args.seed, args.blocks, args.channels)
+    model = create_model(args.seed, args.blocks, args.channels, arch=args.arch)
     optimizer = make_optimizer(model, args.lr)
     progress = {"iteration": 0, "elo": 0.0}
     if progress_file.exists():
